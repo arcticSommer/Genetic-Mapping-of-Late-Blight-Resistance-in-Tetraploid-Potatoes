@@ -8,7 +8,7 @@
 #     Setup working environment and import data
 ###############################################
 
-## install relevant packages
+## Install relevant packages
 #install.packages("CMplot")
 #options(repos = c(CRAN = "https://cloud.r-project.org"))
 #install.packages("tidyverse")
