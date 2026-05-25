@@ -1,0 +1,276 @@
+##############################################
+#  GWAS of Resistance in Potatoes
+##############################################
+
+# BT-6-7
+# Version: 18-05-2026
+
+# Script: PCA 4.1 
+
+##############################################
+#     Setup working environment and import data
+##############################################
+
+# Load packages
+library(ggplot2)
+library(ggthemes)
+library(cowplot)
+library(dplyr)
+library(AGHmatrix)
+
+# Clear global environment, set working directory, and set seed
+rm(list = ls())
+setwd("/home/bio.aau.dk/vm82rp/students/f26/BT_6_7")  
+set.seed(1)
+
+# load data elements
+load("results/geno_final_PCA.RData") # Version without marker, chrom and pos
+load("results/pheno_final.RData") 
+
+
+##############################################
+#     Setup theme
+##############################################
+
+theme_custom <- function() {
+  theme_few() +
+    theme(
+      # Text
+      text = element_text(family = "serif", size = 12),
+      plot.title = element_text(
+        hjust = 0.5,
+        size = 16,
+        face = "bold"
+      ),
+      plot.subtitle = element_text(hjust = 0.5, size = 12),
+      plot.caption = element_text(size = 10),
+      
+      # Axes
+      axis.title = element_text(size = 13),
+      axis.text = element_text(size = 11),
+      
+      # Legend
+      legend.title = element_text(size = 12, face = "bold"),
+      legend.text = element_text(size = 11),
+      legend.background = element_blank(),
+      
+      # Grid lines
+      panel.grid.major = element_line(color = "grey85", linewidth = 0.3),
+      panel.grid.minor = element_line(color = "grey93", linewidth = 0.2),
+      
+      # Background and frame
+      panel.background = element_rect(fill = "white", color = NA),
+      panel.border = element_blank(),
+      
+      # Margins
+      plot.margin = margin(10, 10, 10, 10)
+    )
+}
+
+
+##############################################
+#     Population structure analysis
+##############################################
+
+# Calculation of genomic relationship matrix (GRM)
+G <- Gmatrix(geno_final_PCA, ploidy = 4, ploidy.correction = TRUE) # realized additive relationship matrix
+dim(G)
+table(rownames(G) == rownames(pheno_final))
+
+# Create a heatmap of the GRM to visualize population structure
+png(filename = "plots/PCA_heatmap.png", width = 800, height = 800)
+heatmap(G, labRow = FALSE, labCol = FALSE) 
+dev.off()
+
+# Perform PCA analysis of the GRM
+pca_G <- prcomp(G)
+
+# Compute eigenvalues and variance
+eig <- (pca_G$sdev)^2 
+variance <- eig*100/sum(eig) 
+head(variance) 
+
+# Connect each variance with corresponding PC
+var_G <- data.frame("variance" = variance, 
+                    "PC" = c(1:nrow(pheno_final)))
+
+# Save scores and loadings (x and rotation)
+scores <- data.frame(sample.id = pheno_final$SOR, pca_G$x) 
+head(scores[ ,1:4]) 
+loadings <- as.data.frame(pca_G$rotation) 
+head(loadings[ ,1:4])
+
+# Plot the explained variance of the first 20 PCs
+variance_plot <- ggplot(data = subset(var_G, PC <= 20), aes(x = PC, y = variance)) +
+  geom_bar(stat = "identity", fill = "seagreen") + 
+  labs(x = "Principal component", y = "Variance explained [%]") +
+  theme_custom() 
+plot(variance_plot) 
+ggsave("plots/PCA_variance.png", width = 8, height = 4)
+
+
+##############################################
+#     Annotation and plot of analysis
+##############################################
+
+# Annotate the clones with pedigree information
+pca_population <- cbind(pheno_final, scores) 
+
+# Define colours for each of the 18 parents
+all_parents <- sort(unique(c(pca_population$Mother, pca_population$Father)))
+parent_cols <- c("black",
+                 "gray25", 
+                 "#7a0909",
+                 "saddlebrown",
+                 "yellow",
+                 "#f7b100", 
+                 "#f56105",
+                 "red",
+                 "pink", 
+                 "#fc42f9", 
+                 "purple",
+                 "#5637a6", 
+                 "blue",
+                 "lightskyblue", 
+                 "cyan", 
+                 "seagreen" ,
+                 "palegreen", 
+                 "#afc202") 
+names(parent_cols) <- all_parents
+
+# PC plots coloured based on father and mother with PC1-PC3 (4 plots)
+plot1 = ggplot(pca_population, aes(x = PC1, y = PC2, colour = Father)) +
+  geom_point(size = 1, alpha = 0.6) +
+  scale_colour_manual(values = parent_cols, drop = FALSE) + 
+  theme_custom() + 
+  labs(y = paste0("PC2 (", round(variance[2], 2)," %)"),
+       title = "Father") + 
+  theme(axis.title.x = element_blank())
+plot2 = ggplot(pca_population, aes(x = PC1, y = PC2, colour = Mother)) +
+  geom_point(size = 1, alpha = 0.6) + 
+  scale_colour_manual(values = parent_cols, drop = FALSE) +
+  theme_custom() +
+  labs(title = "Mother",
+       col = "Parent") + # Title for legend
+  theme(axis.title = element_blank())
+plot3 = ggplot(pca_population, aes(x = PC1, y = PC3, colour = Father)) +
+  geom_point(size = 1, alpha = 0.6) + 
+  scale_colour_manual(values = parent_cols, drop = FALSE) +
+  theme_custom() +
+  labs(x = paste0("PC1 (", round(variance[1], 2)," %)"),
+       y = paste0("PC3 (", round(variance[3], 2)," %)"))
+plot4 = ggplot(pca_population, aes(x = PC1, y = PC3, colour = Mother)) +
+  geom_point(size = 1, alpha = 0.6) + 
+  scale_colour_manual(values = parent_cols, drop = FALSE) +
+  theme_custom() +
+  labs(x = paste0("PC1 (", round(variance[1], 2)," %)")) +
+  theme(axis.title.y = element_blank())
+
+plot.panel <- plot_grid(plot1 + theme(legend.position = "none"), 
+                        plot2 + theme(legend.position = "none"),
+                        plot3 + theme(legend.position = "none"),
+                        plot4 + theme(legend.position = "none"))
+
+legend.panel <- get_legend(plot2 + theme(legend.box.margin = margin(0,0,0,12)))
+plot_grid(plot.panel, legend.panel, rel_widths = c(3, .4))
+
+ggsave("plots/PCA_father_and_mother.png", width = 10, height = 6)
+
+
+# PC plots coloured based on father and mother with PC1-PC4 (12 plots)
+plot1 = ggplot(pca_population, aes(x = PC1, y = PC2, colour = Father)) + 
+  geom_point(size = 1, alpha = 0.6) +
+  scale_colour_manual(values = parent_cols, drop = FALSE) + 
+  theme_custom() + 
+  labs(x = paste0("PC1 (", round(variance[1], 2)," %)"), 
+       y = paste0("PC2 (", round(variance[2], 2)," %)"),
+       title = "Father") 
+plot2 = ggplot(pca_population, aes(x = PC1, y = PC2, colour = Mother)) + 
+  geom_point(size = 1, alpha = 0.6) + 
+  scale_colour_manual(values = parent_cols, drop = FALSE) + 
+  theme_custom() + 
+  labs(x = paste0("PC1 (", round(variance[1], 2)," %)"), 
+       y = paste0("PC2 (", round(variance[2], 2)," %)"),
+       title = "Mother",
+       col = "Parent") # Title for legend
+plot3 = ggplot(pca_population, aes(x = PC1, y = PC3, colour = Father)) +
+  geom_point(size = 1, alpha = 0.6) + 
+  scale_colour_manual(values = parent_cols, drop = FALSE) + 
+  theme_custom() +
+  labs(x = paste0("PC1 (", round(variance[1], 2)," %)"),
+       y = paste0("PC3 (", round(variance[3], 2)," %)"))
+plot4 = ggplot(pca_population, aes(x = PC1, y = PC3, colour = Mother)) +
+  geom_point(size = 1, alpha = 0.6) + 
+  scale_colour_manual(values = parent_cols, drop = FALSE) + 
+  theme_custom() +
+  labs(x = paste0("PC1 (", round(variance[1], 2)," %)"),
+       y = paste0("PC3 (", round(variance[3], 2)," %)"))
+plot5 = ggplot(pca_population, aes(x = PC1, y = PC4, colour = Father)) +
+  geom_point(size = 1, alpha = 0.6) + 
+  scale_colour_manual(values = parent_cols, drop = FALSE) + 
+  theme_custom() +
+  labs(x = paste0("PC1 (", round(variance[1], 2)," %)"),
+       y = paste0("PC4 (", round(variance[4], 2)," %)"))
+plot6 = ggplot(pca_population, aes(x = PC1, y = PC4, colour = Mother)) +
+  geom_point(size = 1, alpha = 0.6) + 
+  scale_colour_manual(values = parent_cols, drop = FALSE) + 
+  theme_custom() +
+  labs(x = paste0("PC1 (", round(variance[1], 2)," %)"),
+       y = paste0("PC4 (", round(variance[4], 2)," %)"))
+plot7 = ggplot(pca_population, aes(x = PC2, y = PC3, colour = Father)) +
+  geom_point(size = 1, alpha = 0.6) + 
+  scale_colour_manual(values = parent_cols, drop = FALSE) + 
+  theme_custom() +
+  labs(x = paste0("PC2 (", round(variance[2], 2)," %)"),
+       y = paste0("PC3 (", round(variance[3], 2)," %)"))
+plot8 = ggplot(pca_population, aes(x = PC2, y = PC3, colour = Mother)) +
+  geom_point(size = 1, alpha = 0.6) + 
+  scale_colour_manual(values = parent_cols, drop = FALSE) + 
+  theme_custom() +
+  labs(x = paste0("PC2 (", round(variance[2], 2)," %)"),
+       y = paste0("PC3 (", round(variance[3], 2)," %)"))
+plot9 = ggplot(pca_population, aes(x = PC2, y = PC4, colour = Father)) +
+  geom_point(size = 1, alpha = 0.6) + 
+  scale_colour_manual(values = parent_cols, drop = FALSE) + 
+  theme_custom() +
+  labs(x = paste0("PC2 (", round(variance[2], 2)," %)"),
+       y = paste0("PC4 (", round(variance[4], 2)," %)"))
+plot10 = ggplot(pca_population, aes(x = PC2, y = PC4, colour = Mother)) +
+  geom_point(size = 1, alpha = 0.6) + 
+  scale_colour_manual(values = parent_cols, drop = FALSE) + 
+  theme_custom() +
+  labs(x = paste0("PC2 (", round(variance[2], 2)," %)"),
+       y = paste0("PC4 (", round(variance[4], 2)," %)"))
+plot11 = ggplot(pca_population, aes(x = PC3, y = PC4, colour = Father)) +
+  geom_point(size = 1, alpha = 0.6) + 
+  scale_colour_manual(values = parent_cols, drop = FALSE) +  
+  theme_custom() +
+  labs(x = paste0("PC3 (", round(variance[3], 2)," %)"),
+       y = paste0("PC4 (", round(variance[4], 2)," %)"))
+plot12 = ggplot(pca_population, aes(x = PC3, y = PC4, colour = Mother)) +
+  geom_point(size = 1, alpha = 0.6) + 
+  scale_colour_manual(values = parent_cols, drop = FALSE) +  
+  theme_custom() +
+  labs(x = paste0("PC3 (", round(variance[3], 2)," %)"),
+       y = paste0("PC4 (", round(variance[4], 2)," %)"))
+
+plot.panel <- plot_grid(plot1 + theme(legend.position = "none"), 
+                        plot2 + theme(legend.position = "none"),
+                        plot3 + theme(legend.position = "none"),
+                        plot4 + theme(legend.position = "none"),
+                        plot5 + theme(legend.position = "none"),
+                        plot6 + theme(legend.position = "none"),
+                        plot7 + theme(legend.position = "none"),
+                        plot8 + theme(legend.position = "none"),
+                        plot9 + theme(legend.position = "none"),
+                        plot10 + theme(legend.position = "none"),
+                        plot11 + theme(legend.position = "none"),
+                        plot12 + theme(legend.position = "none"), ncol = 2)
+
+legend.panel <- get_legend(plot2 + theme(legend.box.margin = margin(0,0,0,12))) 
+plot_grid(plot.panel, legend.panel, rel_widths = c(3, .4)) 
+
+ggsave("plots/PCA_father_and_mother_big.png", width = 10, height = 16) 
+
+
+##############################################
