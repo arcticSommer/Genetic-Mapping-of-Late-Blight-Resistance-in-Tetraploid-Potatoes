@@ -1,4 +1,4 @@
-# Genetic Mapping of Resistance to Phytophthora infestans Genes in Tetraploid Potatoes’
+# Genetic Mapping of Resistance to Phytophthora infestans Genes in Tetraploid Potatoes
 
 This github repository contains all code that has been used in the project. 
 
