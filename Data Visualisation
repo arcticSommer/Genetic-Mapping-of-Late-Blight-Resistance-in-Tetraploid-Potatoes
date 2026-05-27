@@ -2,7 +2,7 @@
 
 # BT-6-7
 # Version: 27-05-2026
-# Script: Data_visualisation 2.3
+# Script: Data_visualisation 2.4
 
 
 ###############################################
@@ -33,7 +33,7 @@ set.seed(1)
 
 # load data
 load("results/pheno_final.RData")
-load("results/SNP_final.RData")
+load("results/map.RData")
 
 
 ##############################################
