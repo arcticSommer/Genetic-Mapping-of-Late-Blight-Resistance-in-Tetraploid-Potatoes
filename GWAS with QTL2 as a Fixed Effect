@@ -1,0 +1,517 @@
+
+##############################################
+
+# BT-6-7
+# Version: 27-05-2026
+# Script: GWAS_single_QTL_fixed 1.0
+
+
+#################################################
+#     Setup working environment
+#################################################
+
+library(GWASpoly)
+library(dplyr)
+library(qqman)
+
+# Clear global environment, set working directory, and set seed
+rm(list = ls())
+setwd("/home/bio.aau.dk/vm82rp/students/f26/BT_6_7")  
+set.seed(1)
+
+
+#######################################################
+# ADDITIVE MODEL: Lead SNP chr5_4091093 as fixed effect
+#######################################################
+
+# Load genotype and phenotype data
+load("results/geno_final_GWAS.RData")
+load("results/pheno_final.RData")
+
+# Remove columns "Mother" and "Father"
+pheno_final_GWAS <- pheno_final[,-(2:3)] 
+
+# Swap Cytoplasm and RST columns, to make Cytoplasm the fixed effect in GWASpoly
+pheno_final_GWAS <- pheno_final_GWAS[c(1,3,2)]
+
+# Take out the SNP that is wanted as fixed effect, remove it from the genotype data
+remove_marker <- c("chr05_4091093")
+SNP.lead <- filter(geno_final_GWAS, marker %in% remove_marker)
+geno_final_GWAS_filt <- geno_final_GWAS[!geno_final_GWAS$marker %in% remove_marker, ]
+
+# Add the SNP to the phenotype data to run it as a fixed effect in GWASpoly
+SNP.lead <- SNP.lead[,-(1:3)]
+SNP.lead.t <- t(SNP.lead)
+pheno_final_GWAS$SNP_chr5_4091093 <- SNP.lead.t[,1][pheno_final_GWAS$SOR]
+
+
+## Conduct GWASpoly 
+
+#Formatting R files to CSV format:
+write.csv(pheno_final_GWAS, "pheno_SNP_fixed.csv", row.names = FALSE)
+write.csv(geno_final_GWAS_filt, "geno_SNP_fixed.csv", row.names = FALSE)
+
+data <- read.GWASpoly(ploidy=4, 
+                      pheno.file = "pheno_SNP_fixed.csv", 
+                      geno.file = "geno_SNP_fixed.csv",
+                      format="numeric", 
+                      n.traits=1, 
+                      delim=",")
+
+# Create LOCO GRMs
+data.loco <- set.K(data, LOCO=TRUE)
+
+# Population size
+N <- ncol(geno_final_GWAS_filt) - 3 
+
+# Set params to specify fixed effects
+params <- set.params(geno.freq = 1 - 5/N,
+                     fixed = c("Cytoplasm","SNP_chr5_4091093"),
+                     fixed.type = c("factor","factor"),
+                     n.PC = 3)
+
+# Testing markers for significance - GWASpoly conducts the hypothesis tests for each marker
+data.loco.scan <- GWASpoly(data = data.loco,
+                           models = c("additive"),
+                           traits = c("RST"),
+                           params = params)
+save(data.loco.scan, file = "results/data.loco.scan_chr5_4091093.Rdata")
+
+# Setting the Bonferroni threshold
+data2 <- set.threshold(data.loco.scan,
+                       method="Bonferroni",
+                       level=0.05)
+
+# Manhattan plot 
+p <- manhattan.plot(data2, traits="RST")
+manhattan_chr5_4091093_fixed <- p + theme(axis.text.x = element_text(angle=90,vjust=0.5))
+
+png(filename = "plots/manhattan_chr5_4091093_fixed_additive.png", width = 800, height = 300)
+plot(manhattan_chr5_4091093_fixed)
+dev.off()
+
+# QTL for the additive model
+qtl <- get.QTL(data=data2, 
+               traits="RST",
+               models="additive",
+               bp.window=5e6)
+save(qtl, file = "results/QTL_fixed_chr5_4839577_additive.Rdata")
+
+## Result when including chr5_4091093 as a fixed effect: one significant SNP chr5_4814697
+## This SNP will also be included as a fixed effect in the additive model
+
+
+#############################################################################
+# ADDITIVE MODEL: Lead SNP chr5_4091093 and SNP chr5_4814697 as fixed effects
+#############################################################################
+
+# Clear the global environment 
+rm(list = ls())
+
+# Load genotype and phenotype data
+load("results/geno_final_GWAS.RData")
+load("results/pheno_final.RData")
+
+# Remove columns "Mother" and "Father"
+pheno_final_GWAS <- pheno_final[,-(2:3)] 
+
+# Swap Cytoplasm and RST columns, to make Cytoplasm the fixed effect in GWASpoly
+pheno_final_GWAS <- pheno_final_GWAS[c(1,3,2)]
+
+# Take out the SNPs that are wanted as fixed effects, remove them from the genotype data
+remove_marker <- c("chr05_4091093", "chr05_4814697")
+SNP.lead <- filter(geno_final_GWAS, marker %in% remove_marker)
+geno_final_GWAS_filt <- geno_final_GWAS[!geno_final_GWAS$marker %in% remove_marker, ]
+
+# Add the SNPs to the phenotype data to run them as a fixed effect in GWASpoly
+SNP.lead <- SNP.lead[,-(1:3)]
+SNP.lead.t <- t(SNP.lead)
+pheno_final_GWAS$SNP_chr5_4091093 <- SNP.lead.t[,1][pheno_final_GWAS$SOR]
+pheno_final_GWAS$SNP_chr5_4814697 <- SNP.lead.t[,2][pheno_final_GWAS$SOR]
+
+
+## Conduct GWASpoly 
+
+# Formatting R files to CSV format:
+write.csv(pheno_final_GWAS, "pheno_SNP_fixed.csv", row.names = FALSE)
+write.csv(geno_final_GWAS_filt, "geno_SNP_fixed.csv", row.names = FALSE)
+
+data <- read.GWASpoly(ploidy=4, 
+                      pheno.file = "pheno_SNP_fixed.csv", 
+                      geno.file = "geno_SNP_fixed.csv",
+                      format="numeric", 
+                      n.traits=1, 
+                      delim=",")
+
+# Create LOCO GRMs
+data.loco <- set.K(data, LOCO=TRUE)
+
+# Population size
+N <- ncol(geno_final_GWAS_filt) - 3 # Population size
+
+# Set params to specify fixed effects
+params <- set.params(geno.freq = 1 - 5/N,
+                     fixed = c("Cytoplasm","SNP_chr5_4091093", "SNP_chr5_4814697"),
+                     fixed.type = c("factor","factor", "factor"),
+                     n.PC = 3)
+
+# Testing markers for significance - GWASpoly conducts the hypothesis tests for each marker
+data.loco.scan <- GWASpoly(data = data.loco,
+                           models = c("additive"),
+                           traits = c("RST"),
+                           params = params)
+save(data.loco.scan, file = "results/data.loco.scan_chr5_4091093_and_chr5_4814697.Rdata")
+
+# Setting the Bonferroni threshold
+data2 <- set.threshold(data.loco.scan,
+                       method="Bonferroni",
+                       level=0.05)
+
+# Manhattan plot 
+p <- manhattan.plot(data2, traits="RST")
+manhattan_chr5_4091093_chr5_4814697 <- p + theme(axis.text.x = element_text(angle=90,vjust=0.5))
+
+png(filename = "plots/manhattan_chr5_4091093_and_chr5_4814697_fixed_additive.png", width = 800, height = 300)
+plot(manhattan_chr5_4091093_chr5_4814697)
+dev.off()
+
+## Result when including chr5_4091093 and chr5_4814697 as fixed effect: No significant SNPs are observed, all p-values are under the threshold line. 
+
+
+## Manhattan plot used in the project
+
+results.additive <- data.frame(data.loco.scan@scores)
+results.additive$Marker <- rownames(results.additive)
+results.additive$p.value <- 10^(-results.additive$additive) 
+
+map <- data.frame(data.loco.scan@map)
+
+# If markers have NA in the additive model, remove it from both results and map 
+bad_markers <- results.additive$Marker[is.na(results.additive$additive)]
+
+if (length(bad_markers) > 0) {
+  results.additive <- results.additive[!results.additive$Marker %in% bad_markers, ]
+  map <- map[!map$Marker %in% bad_markers, ]
+}
+
+results.additive <- left_join(results.additive, map, by = "Marker")
+results.additive$Chrom <- as.numeric(as.character(results.additive$Chrom))
+save(results.additive, file = "results/results.additive_chr5_4091093_chr5_4814697.RData")
+
+bonferroni <- 0.05 / nrow(results.additive)
+
+png(file = "plots/qqman_manhattan_chr5_4091093_chr5_4814697_fixed_additive.png", width = 1000, height = 400)
+par(family = "serif",
+    mar = c(5, 6, 4, 2))
+qqman::manhattan(
+  results.additive,
+  chr = "Chrom",
+  bp = "Position",
+  snp = "Marker",
+  p = "p.value",
+  suggestiveline = FALSE,
+  genomewideline = FALSE,
+  col = c("#94b5a0", "seagreen"),
+  main = paste0("Late blight resistance - Additive model, QTL2 fixed"), 
+  ylim = c(0,20),
+  cex.lab = 1.6,
+  cex.axis = 1.4,
+  cex.main = 1.6
+)
+abline(h = -log10(bonferroni), col = "grey30")
+dev.off()
+
+
+
+#############################################################################
+# 1-DOM-ALT: Lead SNP chr5_4076728 as fixed effect
+#############################################################################
+
+# Clear the global environment
+rm(list = ls())
+
+# Load genotypic and phenotypic data
+load("results/geno_final_GWAS.RData")
+load("results/pheno_final.RData")
+
+# Remove columns "Mother" and "Father"
+pheno_final_GWAS <- pheno_final[,-(2:3)] 
+
+# Swap Cytoplasm and RST columns, to make Cytoplasm the fixed effect in GWASpoly
+pheno_final_GWAS <- pheno_final_GWAS[c(1,3,2)]
+
+# Take out the SNP that is wanted as a fixed effect, remove it from the genotype data
+remove_marker <- c("chr05_4076728")
+SNP.lead <- filter(geno_final_GWAS, marker %in% remove_marker)
+geno_final_GWAS_filt <- geno_final_GWAS[!geno_final_GWAS$marker %in% remove_marker, ]
+
+# Add the SNP to the phenotype data to run it as a fixed effect in GWASpoly
+SNP.lead <- SNP.lead[,-(1:3)]
+SNP.lead.t <- t(SNP.lead)
+pheno_final_GWAS$SNP_chr5_4076728 <- SNP.lead.t[,1][pheno_final_GWAS$SOR]
+
+
+## Conduct GWASpoly 
+
+# Formatting R files to CSV format:
+write.csv(pheno_final_GWAS, "pheno_SNP_fixed.csv", row.names = FALSE)
+write.csv(geno_final_GWAS_filt, "geno_SNP_fixed.csv", row.names = FALSE)
+
+# Read data
+data <- read.GWASpoly(ploidy=4, 
+                      pheno.file = "pheno_SNP_fixed.csv", 
+                      geno.file = "geno_SNP_fixed.csv",
+                      format="numeric", 
+                      n.traits=1, 
+                      delim=",")
+
+# Create LOCO GRMs
+data.loco <- set.K(data, LOCO=TRUE)
+
+# Population size
+N <- ncol(geno_final_GWAS_filt) - 3 # Population size
+
+# Set params to specify fixed effects
+params <- set.params(geno.freq = 1 - 5/N,
+                     fixed = c("Cytoplasm","SNP_chr5_4076728"),
+                     fixed.type = c("factor","factor"),
+                     n.PC = 3)
+
+# Testing markers for significance - GWASpoly conducts the hypothesis tests for each marker
+data.loco.scan <- GWASpoly(data = data.loco,
+                           models = c("1-dom"),
+                           traits = c("RST"),
+                           params = params)
+save(data.loco.scan, file = "results/data.loco.scan_chr5_4076728.Rdata")
+
+
+# Setting the Bonferroni threshold
+data2 <- set.threshold(data.loco.scan,
+                       method="Bonferroni",
+                       level=0.05)
+
+# Manhattan plot 
+p <- manhattan.plot(data2, traits="RST")
+manhattan_chr5_4076728 <- p + theme(axis.text.x = element_text(angle=90,vjust=0.5))
+
+png(filename = "plots/manhattan_chr5_4076728_fixed_1.dom.alt.png", width = 800, height = 300)
+plot(manhattan_chr5_4076728)
+dev.off()
+
+## Result when including chr5_4076728 as fixed effect: No significant SNPs, all p-values are under the threshold line 
+
+
+## Manhattan plot used in the project
+
+results.1.dom.alt <- data.frame(data.loco.scan@scores)
+results.1.dom.alt$Marker <- rownames(results.1.dom.alt)
+results.1.dom.alt$p.1.dom.alt <- 10^(-results.1.dom.alt$RST.1.dom.alt) 
+
+map <- data.frame(data.loco.scan@map)
+
+# If markers have NA in 1.dom.alt, remove it from both results and map 
+bad_markers <- results.1.dom.alt$Marker[is.na(results.1.dom.alt$RST.1.dom.alt)]
+
+if (length(bad_markers) > 0) {
+  results.1.dom.alt <- results.1.dom.alt[!results.1.dom.alt$Marker %in% bad_markers, ]
+  map <- map[!map$Marker %in% bad_markers, ]
+}
+
+results.1.dom.alt <- left_join(results.1.dom.alt, map, by = "Marker")
+results.1.dom.alt$Chrom <- as.numeric(as.character(results.1.dom.alt$Chrom))
+save(results.1.dom.alt, file = "results/results.1.dom.alt_chr5_4076728.RData")
+
+bonferroni <- 0.05 / nrow(results.1.dom.alt)
+
+png(file = "plots/qqman_manhattan_chr5_4076728_fixed_1.dom.alt.png", width = 1000, height = 400)
+par(family = "serif",
+    mar = c(5, 6, 4, 2))
+qqman::manhattan(
+  results.1.dom.alt,
+  chr = "Chrom",
+  bp = "Position",
+  snp = "Marker",
+  p = "p.1.dom.alt",
+  suggestiveline = FALSE,
+  genomewideline = FALSE,
+  col = c("#94b5a0", "seagreen"),
+  main = paste0("Late blight resistance - 1-dom-alt, QTL2 fixed"), 
+  ylim = c(0,20),
+  cex.lab = 1.6,
+  cex.axis = 1.4,
+  cex.main = 1.6
+)
+abline(h = -log10(bonferroni), col = "grey30")
+dev.off()
+
+
+#############################################################################
+# 1-DOM-REF: Lead SNP chr5_4839577 as fixed effect
+#############################################################################
+
+# Clear the global environment
+rm(list = ls())
+
+# Load genotypic and phenotypic data
+load("results/geno_final_GWAS.RData")
+load("results/pheno_final.RData")
+
+# Remove columns "Mother" and "Father"
+pheno_final_GWAS <- pheno_final[,-(2:3)] 
+
+# Swap Cytoplasm and RST columns, to make Cytoplasm the fixed effect in GWASpoly
+pheno_final_GWAS <- pheno_final_GWAS[c(1,3,2)]
+
+# Take out the SNP that is wanted as a fixed effect, remove it from the genotypic data
+remove_marker <- c("chr05_4839577")
+SNP.lead <- filter(geno_final_GWAS, marker %in% remove_marker)
+geno_final_GWAS_filt <- geno_final_GWAS[!geno_final_GWAS$marker %in% remove_marker, ]
+
+# Add the SNP to the phenotypic data to run it as a fixed effect in GWASpoly
+SNP.lead <- SNP.lead[,-(1:3)]
+SNP.lead.t <- t(SNP.lead)
+pheno_final_GWAS$SNP_chr5_4839577 <- SNP.lead.t[,1][pheno_final_GWAS$SOR]
+
+
+## Conduct GWASpoly 
+
+# Formatting R files to CSV format
+write.csv(pheno_final_GWAS, "pheno_SNP_fixed.csv", row.names = FALSE)
+write.csv(geno_final_GWAS_filt, "geno_SNP_fixed.csv", row.names = FALSE)
+
+# Read data
+data <- read.GWASpoly(ploidy=4, 
+                      pheno.file = "pheno_SNP_fixed.csv", 
+                      geno.file = "geno_SNP_fixed.csv",
+                      format="numeric", 
+                      n.traits=1, 
+                      delim=",")
+
+# Create LOCO GRMs
+data.loco <- set.K(data, LOCO=TRUE)
+
+# Population size
+N <- ncol(geno_final_GWAS_filt) - 3 # Population size
+
+# Set params to specify fixed effects
+params <- set.params(geno.freq = 1 - 5/N,
+                     fixed = c("Cytoplasm","SNP_chr5_4839577"),
+                     fixed.type = c("factor","factor"),
+                     n.PC = 3)
+
+# Testing markers for significance - GWASpoly conducts the hypothesis tests for each marker
+data.loco.scan <- GWASpoly(data = data.loco,
+                           models = c("1-dom"),
+                           traits = c("RST"),
+                           params = params)
+save(data.loco.scan, file = "results/data.loco.scan_chr5_4839577.Rdata")
+
+
+# Setting the Bonferroni threshold
+data2 <- set.threshold(data.loco.scan,
+                       method="Bonferroni",
+                       level=0.05)
+
+# Manhattan plot 
+p <- manhattan.plot(data2, traits="RST")
+manhattan_chr5_4839577 <- p + theme(axis.text.x = element_text(angle=90,vjust=0.5))
+
+png(filename = "plots/manhattan_chr5_4839577_fixed_1.dom.ref.png", width = 800, height = 300)
+plot(manhattan_chr5_4839577)
+dev.off()
+
+# QTL for 1-dom-ref
+qtl <- get.QTL(data=data2, 
+               traits="RST",
+               models="1-dom-ref",
+               bp.window=5e6)
+save(qtl, file = "results/QTL_fixed_chr5_4839577_1.dom.ref.Rdata")
+
+
+## Result when including chr5_4091093 as a fixed effect: one significant SNP chr08_1068766 
+
+# Partial R^2 for 1-dom-ref chr08_1068766
+fit.ans <- fit.QTL(data = data2,
+                   trait="RST",
+                   qtl=qtl[,c("Marker","Model")],
+                   fixed=data.frame(Effect="Cytoplasm","SNP_chr5_4839577",
+                                    Type="factor", "factor"))
+save(fit.ans, file = "results/R2_1.dom.ref_chr8_1068766.Rdata")
+
+
+## Genomic inflation factor and manhattan plot used in the project
+
+results <- data.frame(data.loco.scan@scores)
+results$Marker <- rownames(results)
+results$p.dom.ref <- 10^(-results$RST.1.dom.ref) 
+
+map <- data.frame(data.loco.scan@map)
+
+# If markers have NA in 1.dom.ref, remove it from both results and map 
+bad_markers <- results$Marker[is.na(results$RST.1.dom.ref)]
+
+if (length(bad_markers) > 0) {
+  results <- results[!results$Marker %in% bad_markers, ]
+  map <- map[!map$Marker %in% bad_markers, ]
+}
+
+# Calculate genomic inflation factor from p-values
+chisq <- qchisq(results$p, 1, lower.tail = FALSE) # convert p-values to chi-square values
+lambda <- median(chisq)/qchisq(0.5,1) # calculate the genomic inflation factor 
+save(lambda, file = "results/lambda_chr5_4839577.fixed.RData")
+#Lambda = 1.05
+
+# Correct p-values
+corr.chisq <- chisq/lambda # correct the chi-square values 
+results$Pcorr <- pchisq(corr.chisq, df = 1, lower.tail = FALSE) 
+results_corr <- left_join(results, map, by = "Marker")
+results_corr$Chrom <- as.numeric(as.character(results_corr$Chrom))
+
+save(results_corr, file = "results/pcorr_chr5_4839577.fixed.RData")
+
+
+# Manhattan plot of corrected p-values
+
+bonferroni <- 0.05 / nrow(results) # Threshold
+
+png(file = "plots/qqman_manhattan_chr5_4839577_fixed_1.dom.ref.png", width = 1000, height = 400)
+par(family = "serif",
+    mar = c(5, 6, 4, 2))
+qqman::manhattan(
+  results_corr,
+  chr = "Chrom",
+  bp = "Position",
+  snp = "Marker",
+  p = "Pcorr",
+  suggestiveline = FALSE,
+  genomewideline = FALSE,
+  col = c("#94b5a0", "seagreen"),
+  main = paste0("Late blight resistance - 1-dom-ref, QTL2 fixed"),
+  ylim = c(0,20),
+  cex.lab = 1.6,
+  cex.axis = 1.4,
+  cex.main = 1.6
+)
+abline(h = -log10(bonferroni), col = "grey30")
+dev.off()
+
+# Significant SNP for 1.dom.ref = chr08_1068766
+snp_select_bonferroni <- results_corr[results_corr$Pcorr < bonferroni, ] 
+save(snp_select_bonferroni, file = "results/significant_snp_chr8_1068766_1.dom.ref.RData")
+
+
+###################################################
+#     MAF for SNP chr8_1068766
+###################################################
+
+remove_marker <- c("chr08_1068766")
+SNP.lead <- filter(geno_final_GWAS, marker %in% remove_marker)
+SNP.lead.re <- SNP.lead[, -(1:3)]
+
+p <- rowSums(SNP.lead.re, na.rm = TRUE)/(4 * ncol(SNP.lead.re)) 
+maf = ifelse(p > 0.5, 1 - p, p)
+
+maf_matrix <- cbind(remove_marker, maf)
+colnames(maf_matrix) <- c("SNP pos", "MAF")
+
+save(maf_matrix, file = "results/maf_cytoplasm_chr8_1068766_fixed.Rdata")
