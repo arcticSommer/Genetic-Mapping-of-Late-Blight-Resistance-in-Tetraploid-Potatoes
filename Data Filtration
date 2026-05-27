@@ -4,11 +4,12 @@
 # Version: 25-05-2026
 # Script: Filtering 6.2 
 
+
 ###############################################
 #     Setup working environment and import data
 ###############################################
 
-## Install relevant packages
+## install relevant packages
 #install.packages("CMplot")
 #options(repos = c(CRAN = "https://cloud.r-project.org"))
 #install.packages("tidyverse")
@@ -24,26 +25,18 @@ rm(list = ls())
 setwd("/home/bio.aau.dk/vm82rp/students/f26/BT_6_7")  
 set.seed(1)
 
-# Load genotype and SNP data
+# Load genotypic and SNP data
 load("data/MASPOT_F1_gt.RData")   
 load("data/snppos.RData")         # SNP positions
 SNP <- snppos
 
-# Remove the columns marker, chrom, and pos
+# Remove the columns marker, chrom, and pos in genotypic data
 Geno_mat <- as.matrix(MASPOT_F1_gt[,-(1:3)])  # kun genotyper
 # Transform the matrix
 Geno_mat <- t(Geno_mat)  # rækker = individer, kolonner = SNPs
 
-# Check dimension and structure 
-dim(Geno_mat)
-str(Geno_mat)
-
-# Load phenotype data
+# Load phenotypic data
 load("data/MASPOT_RST_pt.RData")  
-
-# Check structure and summary 
-str(MASPOT_RST_pt)
-summary(MASPOT_RST_pt) 
 
 # Match phenotype to genotype based on SOR
 match_idx <- match(rownames(Geno_mat), MASPOT_RST_pt$SOR)
@@ -59,7 +52,7 @@ index <- !is.na(pheno_full$RST)
 pheno_use <- pheno_full[index, ] 
 Geno_use  <- Geno_mat[index, ] 
 
-# Check dimensions of phenotype- and genotype data, and whether their rows match
+# Check dimensions of phenotypic- and genotypic data, and whether their rows match
 dim(pheno_use)
 dim(Geno_use)
 all(rownames(Geno_use) == pheno_use$SOR) # Should say TRUE
@@ -76,7 +69,7 @@ snp_missing <- colMeans(is.na(Geno_use)) * 100
 # Missingness for each individual (rows)
 ind_missing <- rowMeans(is.na(Geno_use)) * 100
 
-# Check summary of missing SNPs and individuals
+# Summary of missing SNPs and individuals
 summary(snp_missing)
 summary(ind_missing)
 
@@ -100,6 +93,7 @@ dim(pheno_filtered)
 dim(Geno_ind_filt) 
 nrow(Geno_ind_filt) == nrow(pheno_filtered)  # Must be TRUE
 sum(colMeans(is.na(Geno_use[, -1])) >= 0.5) # How many SNPs were removed 
+
 
 ###############################################
 #     Filtering SNPs with MAF < 1%  
@@ -130,38 +124,38 @@ Geno_imp <- apply(Geno_maf, 2, function(col) {
 sum(is.na(Geno_imp))  # Must be zero
 dim(Geno_imp)
 
-# Make a genotype distribution plot
-SNP_maf <- SNP
-colnames(SNP_maf) <- c("marker", "chrom", "pos")
-SNP_maf <- SNP_maf[match(colnames(Geno_maf), SNP_maf$marker), ]
-SNP_maf$chrom <- as.numeric(as.factor(SNP_maf$chrom))
-
-CMplot(SNP_maf,plot.type="d",bin.size=1e6,chr.den.col=c("darkgreen", "yellow", "red"),file="jpg",file.name="SNP_density3.0", dpi=300,
-       main="SNP density, 1 Mb window",file.output=TRUE,verbose=TRUE,width=9,height=6)
+# Match SNP (containing only columns, chrom, and position) to genotypic data
+map <- SNP %>% 
+  rename(marker = 1, chrom = 2, pos = 3) %>% 
+  filter(marker %in% colnames(Geno_imp)) %>% 
+  mutate(chrom = as.numeric(as.factor(chrom)))
+map <- map[match(colnames(Geno_imp), map$marker), ]
 
 # Check...
-all(SNP_maf$marker == colnames(Geno_maf))  # Must be TRUE
-sum(is.na(SNP_maf$marker))                # Must be 0 
+all(map$marker == colnames(Geno_imp))  # Must be TRUE
+sum(is.na(map$marker))                # Must be 0 
 
 
-##########################################################
-#     Prepare phenotype- and genotype data for PCA and GWAS
-##########################################################
+#############################################################
+#     Prepare phenotypic- and genotypic data for PCA and GWAS
+#############################################################
 
 # Genotype file for PCA
 geno_final_PCA <- round(Geno_imp) # Round genotypes
 
 # Genotype file for GWAS
-geno_m <- t(Geno_imp) 
-SNP_final <- SNP_maf[match(rownames(geno_m), SNP_maf$marker), ]
-geno_final_GWAS <- cbind(SNP_final, round(geno_m))
+#SNP_final <- SNP_maf[match(rownames(geno_m), SNP_maf$marker), ]
+geno_final_GWAS <- cbind(map, round(t(Geno_imp)))
 
 # Phenotype file
 pheno_final <- pheno_filtered
 rownames(pheno_final) <- pheno_final$SOR
 
 save(geno_final_PCA, file = "results/geno_final_PCA.RData")
-save(geno_final_GWAS, file = "results/geno_final_GWAS2.RData")
-save(SNP_final,  file = "results/SNP_final.RData")
+save(geno_final_GWAS, file = "results/geno_final_GWAS.RData")
+save(map,  file = "results/SNP_final.RData")
 save(pheno_final, file = "results/pheno_final.RData")
-save(pheno_use, file = "results/pheno_use.RData")
+
+
+
+
