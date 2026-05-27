@@ -1,0 +1,112 @@
+##############################################
+
+# BT-6-7
+# Version: 27-05-2026
+# Script: NDV_spearman 1.0
+
+##############################################
+#     Setup working environment and load files
+##############################################
+
+# Load packages 
+library(dplyr)
+library(ggplot2)
+library(ggthemes)
+
+# Clear global environment, set working directory, and set seed
+rm(list = ls())
+setwd("/home/bio.aau.dk/vm82rp/students/f26/BT_6_7")  
+set.seed(1)
+
+# Load phenotype data for senescence and late blight resistance 
+load("data/MASPOT_NDV_pt.RData") 
+load("results/pheno_final.RData")
+
+
+##############################################
+#     Setup theme
+##############################################
+
+theme_custom <- function() {
+  theme_few() +
+    theme(
+      # Text
+      text = element_text(family = "serif", size = 12),
+      plot.title = element_text(
+        hjust = 0.5,
+        size = 16,
+        face = "bold"
+      ),
+      plot.subtitle = element_text(hjust = 0.5, size = 12),
+      plot.caption = element_text(size = 10),
+      
+      # Axes
+      axis.title = element_text(size = 13),
+      axis.text = element_text(size = 11),
+      
+      # Legend
+      legend.title = element_text(size = 12, face = "bold"),
+      legend.text = element_text(size = 11),
+      legend.background = element_blank(),
+      
+      # Grid lines
+      panel.grid.major = element_line(color = "grey85", linewidth = 0.3),
+      panel.grid.minor = element_line(color = "grey93", linewidth = 0.2),
+      
+      # Background and frame
+      panel.background = element_rect(fill = "white", color = NA),
+      panel.border = element_blank(),
+      
+      # Margins
+      plot.margin = margin(10, 10, 10, 10)
+    )
+}
+
+
+##############################################
+#     Spearman's rank correlation coefficient
+##############################################
+
+# Remove missing entries 
+index <- !is.na(MASPOT_NDV_pt$NDV)
+NDV_filtered <- MASPOT_NDV_pt[index, ] 
+
+# Compute the mean of the replicates 
+NDV_filtered <- NDV_filtered %>%
+  group_by(SOR) %>%
+  summarise(mean_NDV = mean(NDV))
+
+# Match the individuals 
+merged_NDV_RST <- merge(pheno_final, NDV_filtered, by = "SOR")
+
+# Spearman's rank correlation coefficient  
+corr <- cor.test(x = merged_NDV_RST$RST, y = merged_NDV_RST$mean_NDV, method = 'spearman')
+rho <- corr$estimate # correlation coefficient, rho
+
+save(rho, file = "results/spearman_corr_NDV_RST.Rdata")
+
+# Make a plot using the ranks, senescence on y-axis and late blight resistance on x-axis
+
+# Add ranks
+merged_NDV_RST$x_rank <- rank(merged_NDV_RST$RST)
+merged_NDV_RST$y_rank <- rank(merged_NDV_RST$mean_NDV)
+
+# Coordinate labels
+merged_NDV_RST$label <- paste0("(", merged_NDV_RST$x_rank, ",", merged_NDV_RST$y_rank, ")")
+
+# Plot
+png(filename = "plots/rank_plot_spearmann.png", width = 800, height = 300)
+ggplot(merged_NDV_RST, aes(x = x_rank, y = y_rank)) +
+  geom_point(size = 3, color = "seagreen") +
+  geom_smooth(method = "lm",
+              se = FALSE,
+              color = "blue") +
+  labs(
+    title = paste("Scatter Plot of Ranks\nSpearman Corr =", round(rho, 2)),
+    x = "Rank for late blight disease",
+    y = "Rank for senescence"
+  ) +
+  
+  theme_custom()
+
+dev.off()
