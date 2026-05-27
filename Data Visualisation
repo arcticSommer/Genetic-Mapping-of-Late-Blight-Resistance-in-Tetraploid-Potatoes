@@ -1,1 +1,220 @@
+##############################################
+
+# BT-6-7
+# Version: 27-05-2026
+# Script: Data_visualisation 2.3
+
+
+###############################################
+#     Setup working environment and import data
+###############################################
+
+## Install packages if needed 
+#install.packages("ggplot2")
+#install.packages("ggthemes")
+#install.packages("cowplot")
+#install.packages("CMplot")
+#options(repos = c(CRAN = "https://cloud.r-project.org"))
+#install("dplyr")
+#install("scales")
+
+# Load packages 
+library(ggplot2)
+library(ggthemes)
+library(cowplot)
+library(CMplot)
+library(dplyr)
+library(scales)
+
+# Clear global environment, set working directory, and set seed
+rm(list = ls())
+setwd("/home/bio.aau.dk/vm82rp/students/f26/BT_6_7")  
+set.seed(1) 
+
+# load data
+load("results/pheno_final.RData")
+load("results/SNP_final.RData")
+
+
+##############################################
+#     Setup theme
+##############################################
+
+theme_custom <- function() {
+  theme_few() +
+    theme(
+      # Text
+      text = element_text(family = "serif", size = 12),
+      plot.title = element_text(
+        hjust = 0.5,
+        size = 16,
+        face = "bold"
+      ),
+      plot.subtitle = element_text(hjust = 0.5, size = 12),
+      plot.caption = element_text(size = 10),
+      
+      # Axes
+      axis.title = element_text(size = 13),
+      axis.text = element_text(size = 11),
+      
+      # Legend
+      legend.title = element_text(size = 12, face = "bold"),
+      legend.text = element_text(size = 11),
+      legend.background = element_blank(),
+      
+      # Grid lines
+      panel.grid.major = element_line(color = "grey85", linewidth = 0.3),
+      panel.grid.minor = element_line(color = "grey93", linewidth = 0.2),
+      
+      # Background and frame
+      panel.background = element_rect(fill = "white", color = NA),
+      panel.border = element_blank(),
+      
+      # Margins
+      plot.margin = margin(10, 10, 10, 10)
+    )
+}
+
+
+##############################################
+#     Frequency of Progeny
+##############################################
+
+### Figure 4.1 Heatmap showing number of progeny from each parent ###
+
+heatmap_progeny <- pheno_final %>%
+  count(Mother, Father) 
+
+  ggplot(heatmap_progeny, aes(x = Mother, y = Father, fill = n)) +
+  geom_tile() +
+  geom_text(aes(label = n)) +
+  scale_fill_gradient(low = "white", high = "seagreen") +
+  theme_custom() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+ggsave("plots/heatmap_progeny.png", width = 7.5, height = 5)
+
+
+###############################################
+#     Distribution of Resistance Phenotypes
+###############################################
+
+### Figure 4.2.a Violin plot for the distribution ###
+
+ggplot(pheno_final, aes(x = "", y = RST)) +
+  geom_violin(color = "black", width = 0.9, alpha = 0) +
+  geom_boxplot(width = 0.3, color = "black" , fill = "#f2faf3", outlier.shape = NA) +
+  labs(x = NULL, y = "Late blight res. [1-9]") +
+  scale_y_continuous(breaks = 1:9) +
+  coord_cartesian(ylim = c(1, 10.5)) +
+  theme_custom() +
+  theme(axis.title.y = element_text(size = 23), axis.text.y = element_text(size = 18)) 
+
+ggsave("plots/violinplot.png", width = 10, height = 5)
+
+
+### Figure 4.2.b Boxplots of the MASPOT panel's late blight resistance scores categorised by cytoplasm ###
+
+ggplot(pheno_final, aes(x = reorder(Cytoplasm, RST, FUN = median), y = RST)) + 
+  geom_boxplot(fill = "#f2faf3") + 
+  geom_jitter(color = "seagreen", alpha = 0.3, height = 0.05, width = 0.1, size = 0.5) +
+  labs(x = "Cytoplasm", y = "Late blight res. [1-9]") +
+  scale_y_continuous(breaks = 1:9) +
+  coord_cartesian(ylim = c(1, 10.5)) +
+  theme_custom() +
+  theme(axis.text.x = element_text(size = 20, angle = 90, vjust = 0.5, hjust = 1), axis.title.x = element_text(size = 25),  axis.text.y = element_text(size = 20),
+        axis.title.y = element_text(size = 26))
+
+ggsave("plots/boxplots_RST_cytoplasm.png", width = 10, height = 5)
+
+
+### Figure 4.3 One-way ANOVA and post-hoc Tukey's test ###
+
+# ANOVA
+fit_cytoplasm <- aov(RST ~ Cytoplasm, data = pheno_final)
+summary(fit_cytoplasm)
+
+# Posthoc Tukey test 
+tukey_results <- TukeyHSD(fit_cytoplasm)
+print(tukey_results)
+
+# Plot the results 
+tukey <- as.data.frame(tukey_results$Cytoplasm) 
+tukey <- mutate(tukey, comparison = rownames(tukey))
+
+ggplot(tukey, aes(x = diff, y = comparison)) +
+  geom_point(shape = 3, size = 3) +
+  geom_errorbar( aes(xmin = lwr, xmax = upr), orientation = "y", width = 0.2) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+  labs( x = "Differences in mean late blight res. [1-9]", y = NULL) +
+  theme_custom()
+
+ggsave("plots/anova_tukey_cytoplasm.png", width = 6, height = 3)
+
+
+###############################################################################
+#     Distribution of Late Blight Resistance Scores of Progeny from Each Parent
+###############################################################################
+
+### Figure 4.4.a Box plots with mother and RST scores ###
+
+# Create counts of progeny per mother
+countsm <- pheno_final %>%
+  dplyr::count(Mother)
+
+ggplot(pheno_final, aes(x = reorder(Mother, RST, FUN = median), y = RST)) + 
+  geom_boxplot(fill = "#f2faf3") + 
+  geom_jitter(color = "seagreen", alpha = 0.3, height = 0.05, width = 0.1, size = 0.5) +
+  geom_text(data = countsm, aes(x = Mother, y = 10, label = paste0("n=", n)),
+            inherit.aes = FALSE, size = 3) +
+  labs(x = "Mother", y = "Late blight res. [1-9]") +
+  scale_y_continuous(breaks = 1:9) +
+  coord_cartesian(ylim = c(1, 10.5)) + 
+  theme_custom() +
+  theme(axis.text.x = element_text (angle = 90, vjust = 0.5, hjust = 1))
+
+ggsave("plots/boxplots_mother_progeny_RST.png", width = 10, height = 5)
+
+
+### Figure 4.4.b Box plots with father and RST scores ###
+
+# Create counts of progeny per father
+countsf <- pheno_final %>%
+  dplyr::count(Father)
+
+ggplot(pheno_final, aes(x = reorder(Father, RST, FUN = median), y = RST)) + 
+  geom_boxplot(fill = "#f2faf3") + 
+  geom_jitter(color = "seagreen", alpha = 0.3, height = 0.05, width = 0.1, size = 0.5) +
+  geom_text(data = countsf, aes(x = Father, y = 10, label = paste0("n=", n)),
+            inherit.aes = FALSE, size = 3) +
+  labs(x = "Father", y = "Late blight res. [1-9]") +
+  scale_y_continuous(breaks = 1:9) +
+  coord_cartesian(ylim = c(1, 10.5)) +
+  theme_custom() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+ggsave("plots/boxplots_father_progeny_RST.png", width = 10, height = 5)
+
+
+###############################################
+#     SNP Marker Density Mapping of the Genome
+###############################################
+
+### Figure 4.5 Heat map of marker density in 1-Mb windows for each chromosome ###
+
+CMplot(map,
+       plot.type="d",
+       bin.size=1e6,
+       chr.den.col=c("darkgreen", "yellow", "red"),
+       file="jpg",
+       file.name="SNP_density", 
+       dpi=300,
+       main="Marker density, 1 Mb window",
+       file.output=TRUE,
+       verbose=TRUE,
+       width=9,
+       height=6)
+
+
+
 
