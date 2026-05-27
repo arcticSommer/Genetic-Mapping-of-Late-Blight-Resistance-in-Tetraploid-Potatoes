@@ -1,0 +1,244 @@
+##############################################
+
+# BT-6-7
+# Version: 27-05-2026
+# Script: Appendix_Data_visualisation 1.0
+
+
+###############################################
+#     Setup working environment and import data
+###############################################
+
+# Load packages 
+library(ggplot2)
+library(ggthemes)
+library(tidyverse)
+library(dplyr)
+
+# Clear global environment, set working directory, and set seed
+rm(list = ls())
+setwd("/home/bio.aau.dk/vm82rp/students/f26/BT_6_7")  
+set.seed(1) 
+
+# Load data
+load("data/MASPOT_F1_gt.RData")   
+load("data/snppos.RData") 
+load("results/pheno_final.RData")
+load("data/MASPOT_RST_pt.RData")
+
+
+##############################################
+#     Setup theme
+##############################################
+
+theme_custom <- function() {
+  theme_few() +
+    theme(
+      # Text
+      text = element_text(family = "serif", size = 12),
+      plot.title = element_text(
+        hjust = 0.5,
+        size = 16,
+        face = "bold"
+      ),
+      plot.subtitle = element_text(hjust = 0.5, size = 12),
+      plot.caption = element_text(size = 10),
+      
+      # Axes
+      axis.title = element_text(size = 13),
+      axis.text = element_text(size = 11),
+      
+      # Legend
+      legend.title = element_text(size = 12, face = "bold"),
+      legend.text = element_text(size = 11),
+      legend.background = element_blank(),
+      
+      # Grid lines
+      panel.grid.major = element_line(color = "grey85", linewidth = 0.3),
+      panel.grid.minor = element_line(color = "grey93", linewidth = 0.2),
+      
+      # Background and frame
+      panel.background = element_rect(fill = "white", color = NA),
+      panel.border = element_blank(),
+      
+      # Margins
+      plot.margin = margin(10, 10, 10, 10)
+    )
+}
+
+
+
+##############################################
+#     Figure 8.1
+##############################################
+
+heatmap_progeny_unfiltered <- MASPOT_RST_pt %>%
+  count(Mother, Father) 
+
+ggplot(heatmap_progeny_unfiltered, aes(x = Mother, y = Father, fill = n)) +
+  geom_tile() +
+  geom_text(aes(label = n)) +
+  scale_fill_gradient(low = "white", high = "seagreen") +
+  theme_custom() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+ggsave("plots/heatmap_progeny_unfiltered.png", width = 7.5, height = 5)
+
+
+###############################################
+#     Figure 8.2
+###############################################
+
+ggplot(pheno_final, aes(x = reorder(Mother, RST, FUN = median), y = RST, color = Cytoplasm)) + 
+  geom_boxplot() + 
+  geom_jitter(alpha = 0.3, height = 0.05, width = 0.2, size = 0.5,) +
+  labs(x = "Mother", y = "Late blight res. [1-9]") +
+  scale_y_continuous(breaks = 1:9) +
+  coord_cartesian(ylim = c(1, 10.5)) +
+  theme_custom() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+ggsave("plots/boxplots_mother_progeny_RST_cyto.png", width = 10, height = 5)
+
+
+#######################################################
+#     Figure 8.3 
+#######################################################
+
+### Prepare data for LD decay plots ###
+
+SNP <- snppos
+
+# Genotype data without marker, chrom, and position
+Geno_mat <- as.matrix(MASPOT_F1_gt[,-(1:3)])  
+Geno_mat <- t(Geno_mat)  # Transpose
+
+# Match phenotype to genotype based on ID
+match_idx <- match(rownames(Geno_mat), MASPOT_RST_pt$SOR)
+pheno_full <- MASPOT_RST_pt[match_idx, ]
+
+# Remove individuals with missing scores for late blight resistance (RST)
+index <- !is.na(pheno_full$RST)
+pheno_use <- pheno_full[index, ] 
+Geno_use  <- Geno_mat[index, ]
+
+all(rownames(Geno_use) == pheno_use$SOR) # Must be TRUE
+
+# Filter out SNPs with a missingness > 50%
+Geno_snp_filt <- Geno_use[, colMeans(is.na(Geno_use)) < 0.5]
+
+# Check...
+ncol(Geno_use) # SNPs before filtering
+ncol(Geno_snp_filt) # SNPs post-filtering 
+sum(colMeans(is.na(Geno_use[, -1])) >= 0.5) # How many SNPs were removed 
+max(colMeans(is.na(Geno_snp_filt))) # Must be < 0.5, checking max missingness per SNP
+any(colMeans(is.na(Geno_snp_filt[, -1])) >= 0.5) # Must be FALSE
+
+# Filter out individuals with missingness > 70%
+Geno_ind_filt <- Geno_snp_filt[rowMeans(is.na(Geno_snp_filt)) < 0.7, ] 
+pheno_filtered <- pheno_use[rowMeans(is.na(Geno_snp_filt)) < 0.7, ]
+
+nrow(Geno_ind_filt) == nrow(pheno_filtered)  # Must be TRUE
+
+# Removing SNPs with MAF < 1%
+p <- colSums(Geno_ind_filt, na.rm = TRUE) / (4 * nrow(Geno_ind_filt))
+maf = ifelse(p > 0.5, 1 - p, p) 
+Geno_maf <- Geno_ind_filt[ ,!(maf <= 0.01)] 
+
+perc_missing <- (sum(is.na(Geno_maf))/((ncol(Geno_maf))*nrow(Geno_maf)))*100 # %-missing genotype
+cat("Percentage of missing genotype:", round(perc_missing, 2), "%\n")
+
+# Imputation, replace missing SNP values with a mean
+Geno_imp <- apply(Geno_maf, 2, function(col) {
+  ifelse(is.na(col), mean(col, na.rm = TRUE), col)
+})
+sum(is.na(Geno_imp))  # Must be 0
+
+save(Geno_imp, file = "results/Geno_imp_LD.RData")
+
+# Match SNP (containing only columns, chrom, and position) to genotypic data
+map <- SNP %>% 
+  rename(marker = 1, chrom = 2, pos = 3) %>% 
+  filter(marker %in% colnames(Geno_imp)) %>% 
+  mutate(chrom = as.numeric(as.factor(chrom)))
+
+save(map, file = "results/map_LD.RData")
+
+
+#### LD decay for all 12 chromosome ####
+
+# Make a list to collect LD decay data for every chromosome
+ld_data_collected <- list()
+
+# Collect LD decay data for each chromosome
+for (test_chr in 1:12) {
+  cat("Collecting data for chromosome", test_chr, "...\n")
+  
+  snp_chr <- map$marker[map$chrom == test_chr]
+  Geno_chr <- Geno_imp[, colnames(Geno_imp) %in% snp_chr]
+  Map_chr <- map[map$chrom == test_chr, ]
+  Map_chr <- Map_chr[match(colnames(Geno_chr), Map_chr$marker), ]
+  
+  # Use every 5th SNP for computational speed and RAM)
+  if (ncol(Geno_chr) > 1000) {
+    keep_idx <- seq(1, ncol(Geno_chr), by = 5)
+    Geno_chr <- Geno_chr[, keep_idx]
+    Map_chr <- Map_chr[keep_idx, ]
+  }
+  
+  # Calculate LD matrix
+  ld_matrix <- cor(Geno_chr, use = "pairwise.complete.obs")^2
+  ld_pairs <- which(upper.tri(ld_matrix), arr.ind = TRUE)
+  
+  ld_df <- data.frame(
+    SNP1 = colnames(ld_matrix)[ld_pairs[,1]],
+    SNP2 = colnames(ld_matrix)[ld_pairs[,2]],
+    r2 = ld_matrix[ld_pairs],
+    stringsAsFactors = FALSE
+  )
+  
+  ld_df$pos1 <- as.numeric(Map_chr$pos[match(ld_df$SNP1, Map_chr$marker)])
+  ld_df$pos2 <- as.numeric(Map_chr$pos[match(ld_df$SNP2, Map_chr$marker)])
+  ld_df$distance_Mb <- abs(ld_df$pos1 - ld_df$pos2) / 1e6
+  ld_df <- na.omit(ld_df)
+  
+  # Keep SNP pairs that are within 0.5 Mb of each other 
+  ld_df_sub <- subset(ld_df, distance_Mb <= 0.5)
+  
+  # Add column to tell which data belong to which chromosome
+  ld_df_sub$Chromosome <- paste("Chr", test_chr)
+  
+  # Save in list
+  ld_data_collected[[test_chr]] <- ld_df_sub
+}
+
+
+# Merge LD results for all chromosome into a single dataframe 
+bind_ld_df <- do.call(rbind, ld_data_collected)
+
+# Order chromosomes (Chr 1, Chr 2 ... Chr 12)
+bind_ld_df$Chromosome <- factor(bind_ld_df$Chromosome, 
+                                levels = paste("Chr", 1:12))
+
+# Round distances into 0.01 Mb precision (2 decimals)
+bind_ld_df$distance_Bin <- round(bind_ld_df$distance_Mb, 2)
+
+# Calculate the average LD (r^2) for each combination of SNP distance and chromosome
+bind_ld_bins <- aggregate(r2 ~ distance_Bin + Chromosome, data = bind_ld_df, FUN = mean)
+
+
+## LD decay plots of all chromosomes, showing how LD decreases with distance between SNPs ##
+ggplot(bind_ld_df, aes(x = distance_Mb, y = r2)) +
+  geom_point(alpha = 0.01, color = "darkgreen") + 
+  geom_line(data = bind_ld_bins, aes(x = distance_Bin, y = r2), color = "black", size = 1) + 
+  geom_hline(yintercept = 0.2, linetype = "dashed", color = "red", size = 0.6) + 
+  facet_wrap(~ Chromosome, ncol = 3) + 
+  labs(title = "LD Decay on all 12 chromosomes",
+       subtitle = "Window: 0 - 0.5 Mb. Red line r2 = 0.2",
+       x = "Distance (Mb)",
+       y = expression(r^2)) +
+  theme_minimal(base_size = 10) +
+  xlim(0, 0.5) +
+  ylim(0, 1)
+
+ggsave("plots/LD_decay_all_chromosomes.png", width = 10, height = 12)
