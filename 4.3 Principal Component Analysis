@@ -4,6 +4,7 @@
 # Version: 18-05-2026
 # Script: PCA 4.1 
 
+
 ##############################################
 #     Setup working environment and import data
 ##############################################
@@ -269,3 +270,5 @@ plot_grid(plot.panel, legend.panel, rel_widths = c(3, .4))
 
 ggsave("plots/PCA_father_and_mother_big.png", width = 10, height = 16) 
 
+
+##############################################
