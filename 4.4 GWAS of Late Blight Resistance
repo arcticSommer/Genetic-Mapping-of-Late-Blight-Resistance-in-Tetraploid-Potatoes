@@ -2,7 +2,7 @@
 ##############################################
 
 # BT-6-7
-# Version: 25-05-2026
+# Version: 27-05-2026
 # Script: GWAS_inflation 4.0 
 
 
@@ -421,3 +421,6 @@ maf_matrix <- cbind(remove_marker, maf)
 colnames(maf_matrix) <- c("SNP pos", "MAF")
 
 save(maf_matrix, file = "results/maf_cytoplasm_fixed.Rdata")
+
+
+##############################################
