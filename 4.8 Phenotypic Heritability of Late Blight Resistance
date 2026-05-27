@@ -4,6 +4,7 @@
 # Version: 27-05-2026
 # Script: Phenotypic_heritability 1.0
 
+
 ##############################################
 #     Setup working environment and load files
 ##############################################
@@ -109,3 +110,6 @@ model <- lm(RST ~ MidParent_RST, data = mid_parent)
 pheno_heritability <- model$coefficients[2]
 
 save(pheno_heritability, file = "results/phenotypic_heritability.RData")
+
+
+##############################################
