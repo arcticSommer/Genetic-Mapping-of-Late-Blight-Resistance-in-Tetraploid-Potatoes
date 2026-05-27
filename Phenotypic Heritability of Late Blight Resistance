@@ -1,0 +1,111 @@
+##############################################
+
+# BT-6-7
+# Version: 27-05-2026
+# Script: Phenotypic_heritability 1.0
+
+##############################################
+#     Setup working environment and load files
+##############################################
+
+# Load packages
+library(dplyr)
+library(ggplot2)
+library(ggthemes)
+
+# Clear global environment, set working directory, and set seed
+rm(list = ls())
+setwd("/home/bio.aau.dk/vm82rp/students/f26/BT_6_7")  
+set.seed(1)
+
+# Load phenotype data 
+load("results/pheno_final.RData") 
+
+# Load the file containing late blight resistance scores for the parents of the MASPOT panel as an RData file
+F0 <- read.delim("data/parents_rst.txt", header = TRUE, sep = "\t")
+
+
+##############################################
+#     Setup theme
+##############################################
+
+theme_custom <- function() {
+  theme_few() +
+    theme(
+      # Text
+      text = element_text(family = "serif", size = 12),
+      plot.title = element_text(
+        hjust = 0.5,
+        size = 16,
+        face = "bold"
+      ),
+      plot.subtitle = element_text(hjust = 0.5, size = 12),
+      plot.caption = element_text(size = 10),
+      
+      # Axes
+      axis.title = element_text(size = 13),
+      axis.text = element_text(size = 11),
+      
+      # Legend
+      legend.title = element_text(size = 12, face = "bold"),
+      legend.text = element_text(size = 11),
+      legend.background = element_blank(),
+      
+      # Grid lines
+      panel.grid.major = element_line(color = "grey85", linewidth = 0.3),
+      panel.grid.minor = element_line(color = "grey93", linewidth = 0.2),
+      
+      # Background and frame
+      panel.background = element_rect(fill = "white", color = NA),
+      panel.border = element_blank(),
+      
+      # Margins
+      plot.margin = margin(10, 10, 10, 10)
+    )
+}
+
+
+##############################################
+#     Phenotypic heritability
+##############################################
+
+#Remove Aventra and Rywal from Father and Mother to remove their offsprings
+remove_values <- c("Aventra","Rywal")
+F1 <- pheno_final[!pheno_final$Mother %in% remove_values, ]
+F1 <- F1[!F1$Father %in% remove_values, ]
+F0 <- F0[!F0$SOR %in% remove_values, ]
+
+# Check if Aventra and Rywal are still in the datasets, must say false
+c("Aventra","Rywal") %in% F1$Mother
+c("Aventra","Rywal") %in% F1$Father
+c("Aventra","Rywal") %in% F0$SOR
+
+# Mid-parent values 
+mid_parent <- F1 %>%
+  left_join(F0 %>% select(SOR, Mother_RST = RST), by = c("Mother" = "SOR")) %>%
+  left_join(F0 %>% select(SOR, Father_RST = RST), by = c("Father" = "SOR")) %>%
+  mutate(
+    MidParent_RST = (Mother_RST + Father_RST) / 2
+  )
+
+# Plot regression of mid-parent
+png(filename = "plots/mid_parent_regression.png", width = 700, height = 450)
+ggplot(mid_parent, aes(x = MidParent_RST, y = RST)) +
+  geom_jitter(width = 0.1, height = 0.1, alpha = 0.25, color = "forestgreen", size = 2) +
+  geom_smooth(method = "lm", se = TRUE, color = "dodgerblue3", linewidth = 1.2) +
+  coord_cartesian(xlim = c(2, 9), ylim = c(1, 9)) +
+  scale_x_continuous(breaks = 2:9) +
+  scale_y_continuous(breaks = 1:9) +
+  labs(
+    title = "Mid-parent regression",
+    x = "Predicted resistance of parents",
+    y = "Resistance of progenies"
+  ) +
+  theme_custom()
+dev.off()
+
+# Phenotypic heritability calculated from the slope of the regression line 
+model <- lm(RST ~ MidParent_RST, data = mid_parent)
+pheno_heritability <- model$coefficients[2]
+
+save(pheno_heritability, file = "results/phenotypic_heritability.RData")
