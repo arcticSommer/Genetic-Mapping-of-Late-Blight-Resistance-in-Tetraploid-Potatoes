@@ -269,5 +269,3 @@ plot_grid(plot.panel, legend.panel, rel_widths = c(3, .4))
 
 ggsave("plots/PCA_father_and_mother_big.png", width = 10, height = 16) 
 
-
-##############################################
